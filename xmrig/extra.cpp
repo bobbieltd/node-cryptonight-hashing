@@ -25,9 +25,10 @@
 #include <string.h> // for memcpy
 #include "extra.h"
 #include "crypto/CryptoNight_constants.h"
+#include "common/cpu/Cpu.h"
 #include "Mem.h"
 
-#ifndef XMRIG_NO_ASM
+#if !defined(__ARM_ARCH) && !defined(XMRIG_NO_ASM)
 template<typename T, typename U>
 static void patchCode(T dst, U src, const uint32_t iterations, const uint32_t mask)
 {
@@ -108,6 +109,11 @@ void xmrig::CpuThread::patchAsmVariants()
     Mem::flushInstructionCache(base, allocation_size);
 }
 
-struct Static { Static() { xmrig::CpuThread::patchAsmVariants(); } } s;
+struct Static {
+    Static() {
+        xmrig::Cpu::init();
+        xmrig::CpuThread::patchAsmVariants();
+    }
+} s;
 
 #endif
