@@ -1,7 +1,7 @@
 {
-    "name": "swap-hashing",
-    "version": "3.0.6",
-    "main": "swap-hashing",
+    "name": "conceal-hashing",
+    "version": "7.0.0",
+    "main": "conceal-hashing",
     "author": {
         "name": "Multiple",
         "email": "Check The Git Repo"
