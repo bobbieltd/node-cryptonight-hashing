@@ -1,6 +1,6 @@
 {
     "name": "cryptonight-hashing",
-    "version": "9.0.2",
+    "version": "11.0.0",
     "main": "cryptonight-hashing",
     "author": {
         "name": "Multiple",
@@ -13,7 +13,7 @@
     },
     "dependencies": {
         "bindings": "*",
-        "nan":      "^2.8.0"
+        "nan": "^2.8.0"
     },
     "keywords": [
         "cryptonight",

@@ -19,6 +19,8 @@
 
 #include "xmrig/Mem.h"
 
+#include "xmrig/crypto/randomx/randomx.h"
+
 #if (defined(__AES__) && (__AES__ == 1)) || (defined(__ARM_FEATURE_CRYPTO) && (__ARM_FEATURE_CRYPTO == 1))
 #define SOFT_AES false
 #else
@@ -26,11 +28,67 @@
 #define SOFT_AES true
 #endif
 
-static struct cryptonight_ctx* ctx = NULL;
+static struct cryptonight_ctx* ctx = nullptr;
+static randomx_cache* rx_cache[xmrig::VARIANT_MAX] = {nullptr};
+static randomx_vm* rx_vm[xmrig::VARIANT_MAX] = {nullptr};
+static xmrig::Variant rx_variant = xmrig::VARIANT_MAX;
+static uint8_t rx_seed_hash[xmrig::VARIANT_MAX][32] = {};
 
 void init_ctx() {
     if (ctx) return;
     Mem::create(&ctx, xmrig::CRYPTONIGHT_HEAVY, 1);
+}
+
+void init_rx(const uint8_t* seed_hash_data, xmrig::Variant variant) {
+    bool update_cache = false;
+    if (!rx_cache[variant]) {
+        rx_cache[variant] = randomx_alloc_cache(static_cast<randomx_flags>(RANDOMX_FLAG_JIT | RANDOMX_FLAG_LARGE_PAGES));
+        if (!rx_cache[variant]) {
+            rx_cache[variant] = randomx_alloc_cache(RANDOMX_FLAG_JIT);
+        }
+        update_cache = true;
+    }
+    else if (memcmp(rx_seed_hash[variant], seed_hash_data, sizeof(rx_seed_hash[0])) != 0) {
+        update_cache = true;
+    }
+
+    //if (variant != rx_variant) {
+        switch (variant) {
+            case xmrig::VARIANT_0:
+                randomx_apply_config(RandomX_MoneroConfig);
+                break;
+            case xmrig::VARIANT_RX_WOW:
+                randomx_apply_config(RandomX_WowneroConfig);
+                break;
+            case xmrig::VARIANT_RX_LOKI:
+                randomx_apply_config(RandomX_LokiConfig);
+                break;
+            default:
+                throw std::domain_error("Unknown RandomX variant");
+        }
+        //rx_variant = variant;
+        //update_cache = true;
+    //}
+
+    if (update_cache) {
+        memcpy(rx_seed_hash[variant], seed_hash_data, sizeof(rx_seed_hash[0]));
+        randomx_init_cache(rx_cache[variant], rx_seed_hash[variant], sizeof(rx_seed_hash[0]));
+        if (rx_vm[variant]) {
+            randomx_vm_set_cache(rx_vm[variant], rx_cache[variant]);
+        }
+    }
+
+    if (!rx_vm[variant]) {
+        int flags = RANDOMX_FLAG_LARGE_PAGES | RANDOMX_FLAG_JIT;
+#if !SOFT_AES
+        flags |= RANDOMX_FLAG_HARD_AES;
+#endif
+
+        rx_vm[variant] = randomx_create_vm(static_cast<randomx_flags>(flags), rx_cache[variant], nullptr);
+        if (!rx_vm[variant]) {
+            rx_vm[variant] = randomx_create_vm(static_cast<randomx_flags>(flags - RANDOMX_FLAG_LARGE_PAGES), rx_cache[variant], nullptr);
+        }
+    }
 }
 
 #define THROW_ERROR_EXCEPTION(x) Nan::ThrowError(x)
@@ -42,6 +100,35 @@ void callback(char* data, void* hint) {
 using namespace node;
 using namespace v8;
 using namespace Nan;
+
+NAN_METHOD(randomx) {
+    if (info.Length() < 2) return THROW_ERROR_EXCEPTION("You must provide two arguments.");
+
+    Local<Object> target = info[0]->ToObject();
+    if (!Buffer::HasInstance(target)) return THROW_ERROR_EXCEPTION("Argument 1 should be a buffer object.");
+
+    Local<Object> seed_hash = info[1]->ToObject();
+    if (!Buffer::HasInstance(seed_hash)) return THROW_ERROR_EXCEPTION("Argument 2 should be a buffer object.");
+    if (Buffer::Length(seed_hash) != sizeof(rx_seed_hash[0])) return THROW_ERROR_EXCEPTION("Argument 2 size should be 32 bytes.");
+
+    int variant = 0;
+    if (info.Length() >= 3) {
+        if (!info[2]->IsNumber()) return THROW_ERROR_EXCEPTION("Argument 3 should be a number");
+        variant = Nan::To<int>(info[2]).FromMaybe(0);
+    }
+
+    try {
+        init_rx(reinterpret_cast<const uint8_t*>(Buffer::Data(seed_hash)), static_cast<xmrig::Variant>(variant));
+    } catch (const std::domain_error &e) {
+        return THROW_ERROR_EXCEPTION(e.what());
+    }
+
+    char output[32];
+    randomx_calculate_hash(rx_vm[variant], reinterpret_cast<const uint8_t*>(Buffer::Data(target)), Buffer::Length(target), reinterpret_cast<uint8_t*>(output));
+
+    v8::Local<v8::Value> returnValue = Nan::CopyBuffer(output, 32).ToLocalChecked();
+    info.GetReturnValue().Set(returnValue);
+}
 
 NAN_METHOD(cryptonight) {
     if (info.Length() < 1) return THROW_ERROR_EXCEPTION("You must provide one argument.");
@@ -684,6 +771,7 @@ NAN_MODULE_INIT(init) {
     Nan::Set(target, Nan::New("cryptonight_heavy_async").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(cryptonight_heavy_async)).ToLocalChecked());
     Nan::Set(target, Nan::New("cryptonight_pico").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(cryptonight_pico)).ToLocalChecked());
     Nan::Set(target, Nan::New("cryptonight_pico_async").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(cryptonight_pico_async)).ToLocalChecked());
+    Nan::Set(target, Nan::New("randomx").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(randomx)).ToLocalChecked());
 }
 
 NODE_MODULE(cryptonight, init)
