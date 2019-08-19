@@ -29,12 +29,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdexcept>
 #include <cstring>
 #include <climits>
-#include "jit_compiler_x86.hpp"
-#include "jit_compiler_x86_static.hpp"
-#include "superscalar.hpp"
-#include "program.hpp"
-#include "reciprocal.h"
-#include "virtual_memory.hpp"
+#include "crypto/randomx/jit_compiler_x86.hpp"
+#include "crypto/randomx/jit_compiler_x86_static.hpp"
+#include "crypto/randomx/superscalar.hpp"
+#include "crypto/randomx/program.hpp"
+#include "crypto/randomx/reciprocal.h"
+#include "crypto/randomx/virtual_memory.hpp"
 
 namespace randomx {
 	/*
@@ -194,7 +194,7 @@ namespace randomx {
 	static const uint8_t NOP7[] = { 0x0F, 0x1F, 0x80, 0x00, 0x00, 0x00, 0x00 };
 	static const uint8_t NOP8[] = { 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
-	static const uint8_t* NOPX[] = { NOP1, NOP2, NOP3, NOP4, NOP5, NOP6, NOP7, NOP8 };
+//	static const uint8_t* NOPX[] = { NOP1, NOP2, NOP3, NOP4, NOP5, NOP6, NOP7, NOP8 };
 
 	size_t JitCompilerX86::getCodeSize() {
 		return codePos - prologueSize;

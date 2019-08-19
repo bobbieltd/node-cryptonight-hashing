@@ -32,7 +32,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stddef.h>
 #include <stdint.h>
 #include <type_traits>
-#include "intrin_portable.h"
+#include "crypto/randomx/intrin_portable.h"
 
 #define RANDOMX_HASH_SIZE 32
 #define RANDOMX_DATASET_ITEM_SIZE 64
@@ -286,7 +286,7 @@ RANDOMX_EXPORT void randomx_release_dataset(randomx_dataset *dataset);
  *         (3) cache parameter is NULL and RANDOMX_FLAG_FULL_MEM is not set
  *         (4) dataset parameter is NULL and RANDOMX_FLAG_FULL_MEM is set
 */
-RANDOMX_EXPORT randomx_vm *randomx_create_vm(randomx_flags flags, randomx_cache *cache, randomx_dataset *dataset);
+RANDOMX_EXPORT randomx_vm *randomx_create_vm(randomx_flags flags, randomx_cache *cache, randomx_dataset *dataset, uint8_t *scratchpad);
 
 /**
  * Reinitializes a virtual machine with a new Cache. This function should be called anytime
