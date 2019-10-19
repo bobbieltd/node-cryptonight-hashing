@@ -7,6 +7,7 @@
  * Copyright 2017-2018 XMR-Stak    <https://github.com/fireice-uk>, <https://github.com/psychocrypt>
  * Copyright 2018      Lee Clagett <https://github.com/vtnerd>
  * Copyright 2018-2019 SChernykh   <https://github.com/SChernykh>
+ * Copyright 2018-2019 tevador     <tevador@gmail.com>
  * Copyright 2016-2019 XMRig       <https://github.com/xmrig>, <support@xmrig.com>
  *
  *   This program is free software: you can redistribute it and/or modify
@@ -24,64 +25,71 @@
  */
 
 
-#include "crypto/common/Algorithm.h"
+#include "crypto/common/MemoryPool.h"
+#include "crypto/common/VirtualMemory.h"
 
 
-xmrig::Algorithm::Family xmrig::Algorithm::family(Id id)
+#include <cassert>
+
+
+namespace xmrig {
+
+
+constexpr size_t pageSize = 2 * 1024 * 1024;
+
+
+} // namespace xmrig
+
+
+xmrig::MemoryPool::MemoryPool(size_t size, bool hugePages, uint32_t node) :
+    m_size(size)
 {
-    switch (id) {
-    case CN_0:
-    case CN_1:
-    case CN_2:
-    case CN_R:
-    case CN_FAST:
-    case CN_HALF:
-    case CN_XAO:
-    case CN_RTO:
-    case CN_RWZ:
-    case CN_ZLS:
-    case CN_DOUBLE:
-#   ifdef XMRIG_ALGO_CN_GPU
-    case CN_GPU:
-#   endif
-        return CN;
-
-#   ifdef XMRIG_ALGO_CN_LITE
-    case CN_LITE_0:
-    case CN_LITE_1:
-        return CN_LITE;
-#   endif
-
-#   ifdef XMRIG_ALGO_CN_HEAVY
-    case CN_HEAVY_0:
-    case CN_HEAVY_TUBE:
-    case CN_HEAVY_XHV:
-        return CN_HEAVY;
-#   endif
-
-#   ifdef XMRIG_ALGO_CN_PICO
-    case CN_PICO_0:
-        return CN_PICO;
-#   endif
-
-#   ifdef XMRIG_ALGO_RANDOMX
-    case RX_0:
-    case RX_WOW:
-    case RX_LOKI:
-    case DEFYX:
-    case RX_ARQ:
-        return RANDOM_X;
-#   endif
-
-#   ifdef XMRIG_ALGO_ARGON2
-    case AR2_CHUKWA:
-    case AR2_WRKZ:
-        return ARGON2;
-#   endif
-
-    default:
-        break;
+    if (!size) {
+        return;
     }
 
-    return UNKNOWN;
+    m_memory = new VirtualMemory(size * pageSize, hugePages, false, node);
+}
+
+
+xmrig::MemoryPool::~MemoryPool()
+{
+    delete m_memory;
+}
+
+
+bool xmrig::MemoryPool::isHugePages(uint32_t) const
+{
+    return m_memory && m_memory->isHugePages();
+}
+
+
+uint8_t *xmrig::MemoryPool::get(size_t size, uint32_t)
+{
+    assert(!(size % pageSize));
+
+    if (!m_memory || (m_memory->size() - m_offset) < size) {
+        return nullptr;
+    }
+
+    uint8_t *out = m_memory->scratchpad() + m_offset;
+
+    m_offset += size;
+    ++m_refs;
+
+    return out;
+}
+
+
+void xmrig::MemoryPool::release(uint32_t)
+{
+    assert(m_refs > 0);
+
+    if (m_refs > 0) {
+        --m_refs;
+    }
+
+    if (m_refs == 0) {
+        m_offset = 0;
+    }
 }

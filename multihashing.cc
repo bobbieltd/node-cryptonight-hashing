@@ -47,7 +47,7 @@ extern "C" {
 #endif
 
 const size_t max_mem_size = 4 * 1024 * 1024;
-xmrig::VirtualMemory mem(max_mem_size, true, 4096);
+xmrig::VirtualMemory mem(max_mem_size, true, false, 0, 4096);
 static struct cryptonight_ctx* ctx = nullptr;
 static randomx_cache* rx_cache[xmrig::Algorithm::Id::MAX] = {nullptr};
 static randomx_vm* rx_vm[xmrig::Algorithm::Id::MAX] = {nullptr};
@@ -80,6 +80,9 @@ void init_rx(const uint8_t* seed_hash_data, xmrig::Algorithm::Id algo) {
                 break;
             case 1:
                 randomx_apply_config(RandomX_ScalaConfig);
+                break;
+            case 2:
+                randomx_apply_config(RandomX_ArqmaConfig);
                 break;
             case 17:
                 randomx_apply_config(RandomX_WowneroConfig);
@@ -169,7 +172,6 @@ static xmrig::cn_hash_fun get_cn_fn(const int algo) {
     case 8:  return FNA(CN_2);
     case 9:  return FNA(CN_HALF);
     case 11: return FN(CN_GPU);
-    case 12: return FNA(CN_WOW);
     case 13: return FNA(CN_R);
     case 14: return FNA(CN_RWZ);
     case 15: return FNA(CN_ZLS);

@@ -7,6 +7,7 @@
  * Copyright 2017-2018 XMR-Stak    <https://github.com/fireice-uk>, <https://github.com/psychocrypt>
  * Copyright 2018      Lee Clagett <https://github.com/vtnerd>
  * Copyright 2018-2019 SChernykh   <https://github.com/SChernykh>
+ * Copyright 2018-2019 tevador     <tevador@gmail.com>
  * Copyright 2016-2019 XMRig       <https://github.com/xmrig>, <support@xmrig.com>
  *
  *   This program is free software: you can redistribute it and/or modify
@@ -23,65 +24,43 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef XMRIG_MEMORYPOOL_H
+#define XMRIG_MEMORYPOOL_H
 
-#include "crypto/common/Algorithm.h"
+
+#include "backend/common/interfaces/IMemoryPool.h"
+#include "base/tools/Object.h"
 
 
-xmrig::Algorithm::Family xmrig::Algorithm::family(Id id)
+namespace xmrig {
+
+
+class VirtualMemory;
+
+
+class MemoryPool : public IMemoryPool
 {
-    switch (id) {
-    case CN_0:
-    case CN_1:
-    case CN_2:
-    case CN_R:
-    case CN_FAST:
-    case CN_HALF:
-    case CN_XAO:
-    case CN_RTO:
-    case CN_RWZ:
-    case CN_ZLS:
-    case CN_DOUBLE:
-#   ifdef XMRIG_ALGO_CN_GPU
-    case CN_GPU:
-#   endif
-        return CN;
+public:
+    XMRIG_DISABLE_COPY_MOVE_DEFAULT(MemoryPool)
 
-#   ifdef XMRIG_ALGO_CN_LITE
-    case CN_LITE_0:
-    case CN_LITE_1:
-        return CN_LITE;
-#   endif
+    MemoryPool(size_t size, bool hugePages, uint32_t node = 0);
+    ~MemoryPool() override;
 
-#   ifdef XMRIG_ALGO_CN_HEAVY
-    case CN_HEAVY_0:
-    case CN_HEAVY_TUBE:
-    case CN_HEAVY_XHV:
-        return CN_HEAVY;
-#   endif
+protected:
+    bool isHugePages(uint32_t node) const override;
+    uint8_t *get(size_t size, uint32_t node) override;
+    void release(uint32_t node) override;
 
-#   ifdef XMRIG_ALGO_CN_PICO
-    case CN_PICO_0:
-        return CN_PICO;
-#   endif
+private:
+    size_t m_size           = 0;
+    size_t m_refs           = 0;
+    size_t m_offset         = 0;
+    VirtualMemory *m_memory = nullptr;
+};
 
-#   ifdef XMRIG_ALGO_RANDOMX
-    case RX_0:
-    case RX_WOW:
-    case RX_LOKI:
-    case DEFYX:
-    case RX_ARQ:
-        return RANDOM_X;
-#   endif
 
-#   ifdef XMRIG_ALGO_ARGON2
-    case AR2_CHUKWA:
-    case AR2_WRKZ:
-        return ARGON2;
-#   endif
+} /* namespace xmrig */
 
-    default:
-        break;
-    }
 
-    return UNKNOWN;
-}
+
+#endif /* XMRIG_MEMORYPOOL_H */

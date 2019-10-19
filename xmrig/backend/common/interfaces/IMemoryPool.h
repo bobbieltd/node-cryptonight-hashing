@@ -7,6 +7,7 @@
  * Copyright 2017-2018 XMR-Stak    <https://github.com/fireice-uk>, <https://github.com/psychocrypt>
  * Copyright 2018      Lee Clagett <https://github.com/vtnerd>
  * Copyright 2018-2019 SChernykh   <https://github.com/SChernykh>
+ * Copyright 2018-2019 tevador     <tevador@gmail.com>
  * Copyright 2016-2019 XMRig       <https://github.com/xmrig>, <support@xmrig.com>
  *
  *   This program is free software: you can redistribute it and/or modify
@@ -23,65 +24,30 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef XMRIG_IMEMORYPOOL_H
+#define XMRIG_IMEMORYPOOL_H
 
-#include "crypto/common/Algorithm.h"
+
+#include <cstddef>
+#include <cstdint>
 
 
-xmrig::Algorithm::Family xmrig::Algorithm::family(Id id)
+namespace xmrig {
+
+
+class IMemoryPool
 {
-    switch (id) {
-    case CN_0:
-    case CN_1:
-    case CN_2:
-    case CN_R:
-    case CN_FAST:
-    case CN_HALF:
-    case CN_XAO:
-    case CN_RTO:
-    case CN_RWZ:
-    case CN_ZLS:
-    case CN_DOUBLE:
-#   ifdef XMRIG_ALGO_CN_GPU
-    case CN_GPU:
-#   endif
-        return CN;
+public:
+    virtual ~IMemoryPool() = default;
 
-#   ifdef XMRIG_ALGO_CN_LITE
-    case CN_LITE_0:
-    case CN_LITE_1:
-        return CN_LITE;
-#   endif
+    virtual bool isHugePages(uint32_t node) const       = 0;
+    virtual uint8_t *get(size_t size, uint32_t node)    = 0;
+    virtual void release(uint32_t node)                 = 0;
+};
 
-#   ifdef XMRIG_ALGO_CN_HEAVY
-    case CN_HEAVY_0:
-    case CN_HEAVY_TUBE:
-    case CN_HEAVY_XHV:
-        return CN_HEAVY;
-#   endif
 
-#   ifdef XMRIG_ALGO_CN_PICO
-    case CN_PICO_0:
-        return CN_PICO;
-#   endif
+} /* namespace xmrig */
 
-#   ifdef XMRIG_ALGO_RANDOMX
-    case RX_0:
-    case RX_WOW:
-    case RX_LOKI:
-    case DEFYX:
-    case RX_ARQ:
-        return RANDOM_X;
-#   endif
 
-#   ifdef XMRIG_ALGO_ARGON2
-    case AR2_CHUKWA:
-    case AR2_WRKZ:
-        return ARGON2;
-#   endif
 
-    default:
-        break;
-    }
-
-    return UNKNOWN;
-}
+#endif /* XMRIG_IMEMORYPOOL_H */
