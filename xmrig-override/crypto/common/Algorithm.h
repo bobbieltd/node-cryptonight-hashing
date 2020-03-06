@@ -26,6 +26,9 @@
 #ifndef XMRIG_ALGORITHM_H
 #define XMRIG_ALGORITHM_H
 
+#include <stdint.h>
+#include <stddef.h>
+
 
 #define XMRIG_ALGO_CN_GPU   1
 #define XMRIG_ALGO_CN_LITE  1
@@ -33,6 +36,7 @@
 #define XMRIG_ALGO_CN_PICO  1
 #define XMRIG_ALGO_RANDOMX  1
 #define XMRIG_ALGO_ARGON2   1
+#define XMRIG_ALGO_ASTROBWT 1
 
 
 namespace xmrig {
@@ -60,15 +64,17 @@ public:
         CN_HEAVY_0,    // "cn-heavy/0"       CryptoNight-Heavy (4 MB).
         CN_HEAVY_TUBE, // "cn-heavy/tube"    CryptoNight-Heavy (modified, TUBE only).
         CN_HEAVY_XHV,  // "cn-heavy/xhv"     CryptoNight-Heavy (modified, Haven Protocol only).
-        CN_PICO_0,     // "cn-pico"          CryptoNight Turtle (TRTL)
+        CN_PICO_0,     // "cn-pico"          CryptoNight-Pico
+        CN_PICO_TLO,   // "cn-pico/tlo"      CryptoNight-Pico (TLO)
         RX_0,          // "rx/0"             RandomX (reference configuration).
-        RX_V,          // "rx/v"             RandomV (Monerov).
         RX_WOW,        // "rx/wow"           RandomWOW (Wownero).
         RX_LOKI,       // "rx/loki"          RandomXL (Loki).
         DEFYX,         // "defyx"            DefyX (Scala).
         RX_ARQ,        // "rx/arq"           RandomARQ (Arqma).
+        RX_SFX,        // "rx/sfx"           RandomSFX (Safex Cash).
         AR2_CHUKWA,    // "argon2/chukwa"    Argon2id (Chukwa).
         AR2_WRKZ,      // "argon2/wrkz"      Argon2id (WRKZ)
+        ASTROBWT_DERO, // "astrobwt"         AstroBWT (Dero)
         MAX
     };
 
@@ -79,7 +85,8 @@ public:
         CN_HEAVY,
         CN_PICO,
         RANDOM_X,
-        ARGON2
+        ARGON2,
+        ASTROBWT
     };
 
     inline Algorithm()                                     {}

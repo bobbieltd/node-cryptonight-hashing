@@ -4,6 +4,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 cd $DIR
 node test.js
+node test_astrobwt.js
 node test_k12.js
 node test_sync-1.js
 node test_sync-2.js
@@ -28,12 +29,12 @@ node test_rx_arq.js
 node test_rx_defyx.js
 node test_rx_wow.js
 node test_rx_loki.js
-node test_rx_v.js
 node test_rx_switch.js
 node test_ar2_chukwa.js
 node test_ar2_wrkz.js
 
 node test_perf.js
+node test_perf_astrobwt.js
 node test_perf_k12.js
 node test_perf_light.js
 node test_perf_heavy.js

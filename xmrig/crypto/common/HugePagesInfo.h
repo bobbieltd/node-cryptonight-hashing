@@ -22,41 +22,46 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_CPU_H
-#define XMRIG_CPU_H
+#ifndef XMRIG_HUGEPAGESINFO_H
+#define XMRIG_HUGEPAGESINFO_H
 
 
-#include "crypto/common/Assembly.h"
+#include <cstdint>
+#include <cstddef>
 
 
 namespace xmrig {
 
-class ICpuInfo
+
+class VirtualMemory;
+
+
+class HugePagesInfo
 {
 public:
-    bool hasAVX2() const {
-#ifdef __AVX2__
-        return true;
-#else
-        return false;
-#endif
+    HugePagesInfo() = default;
+    HugePagesInfo(const VirtualMemory *memory);
+
+    size_t allocated    = 0;
+    size_t total        = 0;
+    size_t size         = 0;
+
+    inline bool isFullyAllocated() const { return allocated == total; }
+    inline double percent() const        { return allocated == 0 ? 0.0 : static_cast<double>(allocated) / total * 100.0; }
+    inline void reset()                  { allocated = 0; total = 0; size = 0; }
+
+    inline HugePagesInfo &operator+=(const HugePagesInfo &other)
+    {
+        allocated += other.allocated;
+        total     += other.total;
+        size      += other.size;
+
+        return *this;
     }
-
-    bool hasBMI2() const {
-        return false; 
-    }
-};
-
-
-class Cpu
-{
-public:
-    static ICpuInfo *info() { static ICpuInfo info; return &info; }
-    inline static Assembly::Id assembly(Assembly::Id hint) { return hint; }
 };
 
 
 } /* namespace xmrig */
 
 
-#endif /* XMRIG_CPU_H */
+#endif /* XMRIG_HUGEPAGESINFO_H */
