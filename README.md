@@ -6,16 +6,17 @@ Cryptonight hashing functions for node.js.
 
 Algorithms
 ----------
-* cryptonight (v0, v1, v2, r, half, xtl, msr, rto, xao, gpu, wow, rwz, zls, double)
+* cryptonight (v0, v1, v2, r, half, xtl, msr, rto, xao, gpu, wow, rwz, zls, double, ccx)
 * cryptonight-light (v0, v1)
 * cryptonight-heavy (v0, xhv, tube)
 * cryptonight-pico (IRD)
-* argon2 (chukwa, wrkz)
+* argon2 (chukwa, chukwa2, wrkz)
 * astrobwt (DERO)
-* RandomX (Wownero, Loki, Arqma, V)
-* DefyX (Scala)
+* RandomX (Wownero, Arqma, Keva)
+* Panther (Scala)
 * KangarooTwelve (AEON)
-* cuckaroo29s, cuckaroo29v 
+* cuckaroo29s, cuckaroo29v, cuckaroo29b, cuckaroo29i
+* KawPow (RVN)
 
 Installing locally and testing
 -----

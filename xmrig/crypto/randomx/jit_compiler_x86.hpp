@@ -41,13 +41,13 @@ namespace randomx {
 	class JitCompilerX86;
 	class Instruction;
 
-	typedef void(JitCompilerX86::*InstructionGeneratorX86)(const Instruction&);
+	typedef void(*InstructionGeneratorX86)(JitCompilerX86*, const Instruction&);
 
 	constexpr uint32_t CodeSize = 64 * 1024;
 
 	class JitCompilerX86 {
 	public:
-		JitCompilerX86();
+		explicit JitCompilerX86(bool hugePagesEnable);
 		~JitCompilerX86();
 		void prepare();
 		void generateProgram(Program&, ProgramConfiguration&, uint32_t);
@@ -67,52 +67,54 @@ namespace randomx {
 		size_t getCodeSize();
 
 		alignas(64) static InstructionGeneratorX86 engine[256];
+
 		int registerUsage[RegistersCount];
-		uint8_t* allocatedCode;
 		uint8_t* code;
+		uint32_t codePos;
+		uint32_t codePosFirst;
+		uint32_t vm_flags;
+
 #		ifdef XMRIG_FIX_RYZEN
 		std::pair<const void*, const void*> mainLoopBounds;
 #		endif
-		int32_t codePos;
-		int32_t codePosFirst;
-		uint32_t vm_flags;
 
-		static bool BranchesWithin32B;
+		bool BranchesWithin32B = false;
 		bool hasAVX;
 		bool hasXOP;
 
-		static void applyTweaks();
+		uint8_t* allocatedCode;
+
 		void generateProgramPrologue(Program&, ProgramConfiguration&);
 		void generateProgramEpilogue(Program&, ProgramConfiguration&);
 		template<bool rax>
-		static void genAddressReg(const Instruction&, uint8_t* code, int& codePos);
-		static void genAddressRegDst(const Instruction&, uint8_t* code, int& codePos);
-		static void genAddressImm(const Instruction&, uint8_t* code, int& codePos);
-		static void genSIB(int scale, int index, int base, uint8_t* code, int& codePos);
+		static void genAddressReg(const Instruction&, const uint32_t src, uint8_t* code, uint32_t& codePos);
+		static void genAddressRegDst(const Instruction&, uint8_t* code, uint32_t& codePos);
+		static void genAddressImm(const Instruction&, uint8_t* code, uint32_t& codePos);
+		static void genSIB(int scale, int index, int base, uint8_t* code, uint32_t& codePos);
 
 		void generateSuperscalarCode(Instruction &, std::vector<uint64_t> &);
 
-		static void emitByte(uint8_t val, uint8_t* code, int& codePos) {
+		static void emitByte(uint8_t val, uint8_t* code, uint32_t& codePos) {
 			code[codePos] = val;
 			++codePos;
 		}
 
-		static void emit32(uint32_t val, uint8_t* code, int& codePos) {
+		static void emit32(uint32_t val, uint8_t* code, uint32_t& codePos) {
 			memcpy(code + codePos, &val, sizeof val);
 			codePos += sizeof val;
 		}
 
-		static void emit64(uint64_t val, uint8_t* code, int& codePos) {
+		static void emit64(uint64_t val, uint8_t* code, uint32_t& codePos) {
 			memcpy(code + codePos, &val, sizeof val);
 			codePos += sizeof val;
 		}
 
 		template<size_t N>
-		static void emit(const uint8_t (&src)[N], uint8_t* code, int& codePos) {
+		static void emit(const uint8_t (&src)[N], uint8_t* code, uint32_t& codePos) {
 			emit(src, N, code, codePos);
 		}
 
-		static void emit(const uint8_t* src, size_t count, uint8_t* code, int& codePos) {
+		static void emit(const uint8_t* src, size_t count, uint8_t* code, uint32_t& codePos) {
 			memcpy(code + codePos, src, count);
 			codePos += count;
 		}
@@ -145,11 +147,13 @@ namespace randomx {
 		void h_FMUL_R(const Instruction&);
 		void h_FDIV_M(const Instruction&);
 		void h_FSQRT_R(const Instruction&);
+
+		template<bool jccErratum>
 		void h_CBRANCH(const Instruction&);
+
 		void h_CFROUND(const Instruction&);
 		void h_CFROUND_BMI2(const Instruction&);
 		void h_ISTORE(const Instruction&);
 		void h_NOP(const Instruction&);
 	};
-
 }

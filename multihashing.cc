@@ -16,11 +16,12 @@
 #include "crypto/cn/CnHash.h"
 #include "crypto/randomx/configuration.h"
 #include "crypto/randomx/randomx.h"
-#include "crypto/defyx/defyx.h"
 #include "crypto/astrobwt/AstroBWT.h"
+#include "crypto/kawpow/KPHash.h"
+#include "crypto/kawpow/KPCache.h"
 
 extern "C" {
-#include "crypto/defyx/KangarooTwelve.h"
+#include "crypto/randomx/defyx/KangarooTwelve.h"
 #include "crypto/randomx/blake2/blake2.h"
 #include "c29/portable_endian.h" // for htole32/64
 #include "c29/int-util.h"
@@ -54,6 +55,7 @@ extern "C" {
   #define FNA(algo) xmrig::CnHash::fn(xmrig::Algorithm::algo, SOFT_AES ? xmrig::CnHash::AV_SINGLE_SOFT : xmrig::CnHash::AV_SINGLE, xmrig::Assembly::NONE)
 #endif
 
+
 const size_t max_mem_size = 20 * 1024 * 1024;
 xmrig::VirtualMemory mem(max_mem_size, true, false, 0, 4096);
 static struct cryptonight_ctx* ctx = nullptr;
@@ -64,17 +66,17 @@ static uint8_t rx_seed_hash[xmrig::Algorithm::Id::MAX][32] = {};
 
 struct InitCtx {
     InitCtx() {
-        xmrig::CnCtx::create(&ctx, mem.scratchpad(), max_mem_size, 1);
+        xmrig::CnCtx::create(&ctx, static_cast<uint8_t*>(_mm_malloc(max_mem_size, 4096)), max_mem_size, 1);
     }
 } s;
 
 void init_rx(const uint8_t* seed_hash_data, xmrig::Algorithm::Id algo) {
     bool update_cache = false;
     if (!rx_cache[algo]) {
-        xmrig::VirtualMemory* const pmemory = new xmrig::VirtualMemory(RANDOMX_CACHE_MAX_SIZE, true, false, 0, 4096);
-        rx_cache[algo] = randomx_create_cache(static_cast<randomx_flags>(RANDOMX_FLAG_JIT | RANDOMX_FLAG_LARGE_PAGES), pmemory->raw());
+        uint8_t* const pmem = static_cast<uint8_t*>(_mm_malloc(RANDOMX_CACHE_MAX_SIZE, 4096));
+        rx_cache[algo] = randomx_create_cache(static_cast<randomx_flags>(RANDOMX_FLAG_JIT | RANDOMX_FLAG_LARGE_PAGES), pmem);
         if (!rx_cache[algo]) {
-            rx_cache[algo] = randomx_create_cache(RANDOMX_FLAG_JIT, pmemory->raw());
+            rx_cache[algo] = randomx_create_cache(RANDOMX_FLAG_JIT, pmem);
         }
         update_cache = true;
     }
@@ -93,11 +95,14 @@ void init_rx(const uint8_t* seed_hash_data, xmrig::Algorithm::Id algo) {
             case 2:
                 randomx_apply_config(RandomX_ArqmaConfig);
                 break;
+            case 3:
+                randomx_apply_config(RandomX_Scala2Config);
+                break;
             case 17:
                 randomx_apply_config(RandomX_WowneroConfig);
                 break;
-            case 18:
-                randomx_apply_config(RandomX_LokiConfig);
+            case 19:
+                randomx_apply_config(RandomX_KevaConfig);
                 break;
             default:
                 throw std::domain_error("Unknown RandomX algo");
@@ -120,9 +125,9 @@ void init_rx(const uint8_t* seed_hash_data, xmrig::Algorithm::Id algo) {
         flags |= RANDOMX_FLAG_HARD_AES;
 #endif
 
-        rx_vm[algo] = randomx_create_vm(static_cast<randomx_flags>(flags), rx_cache[algo], nullptr, mem.scratchpad());
+        rx_vm[algo] = randomx_create_vm(static_cast<randomx_flags>(flags), rx_cache[algo], nullptr, mem.scratchpad(), 0);
         if (!rx_vm[algo]) {
-            rx_vm[algo] = randomx_create_vm(static_cast<randomx_flags>(flags - RANDOMX_FLAG_LARGE_PAGES), rx_cache[algo], nullptr, mem.scratchpad());
+            rx_vm[algo] = randomx_create_vm(static_cast<randomx_flags>(flags - RANDOMX_FLAG_LARGE_PAGES), rx_cache[algo], nullptr, mem.scratchpad(), 0);
         }
     }
 }
@@ -161,11 +166,18 @@ NAN_METHOD(randomx) {
     }
 
     char output[32];
+    xmrig::Algorithm xalgo;
     switch (algo) {
-      case 1:  defyx_calculate_hash  (rx_vm[algo], reinterpret_cast<const uint8_t*>(Buffer::Data(target)), Buffer::Length(target), reinterpret_cast<uint8_t*>(output));
-               break;
-      default: randomx_calculate_hash(rx_vm[algo], reinterpret_cast<const uint8_t*>(Buffer::Data(target)), Buffer::Length(target), reinterpret_cast<uint8_t*>(output));
+        case 0:  xalgo = xmrig::Algorithm::RX_0; break;
+        //case 1:  xalgo = xmrig::Algorithm::RX_DEFYX; break;
+        case 2:  xalgo = xmrig::Algorithm::RX_ARQ; break;
+        case 3:  xalgo = xmrig::Algorithm::RX_XLA; break;
+        case 17: xalgo = xmrig::Algorithm::RX_WOW; break;
+        //case 18: xalgo = xmrig::Algorithm::RX_LOKI; break;
+        case 19: xalgo = xmrig::Algorithm::RX_KEVA; break;
+        default: xalgo = xmrig::Algorithm::RX_0;
     }
+    randomx_calculate_hash(rx_vm[algo], reinterpret_cast<const uint8_t*>(Buffer::Data(target)), Buffer::Length(target), reinterpret_cast<uint8_t*>(output), xalgo);
 
     v8::Local<v8::Value> returnValue = Nan::CopyBuffer(output, 32).ToLocalChecked();
     info.GetReturnValue().Set(returnValue);
@@ -186,7 +198,8 @@ static xmrig::cn_hash_fun get_cn_fn(const int algo) {
     case 14: return FNA(CN_RWZ);
     case 15: return FNA(CN_ZLS);
     case 16: return FNA(CN_DOUBLE);
-    default: return FN(CN_1);
+    case 17: return FNA(CN_CCX);
+    default: return FN(CN_R);
   }
 }
 
@@ -217,6 +230,7 @@ static xmrig::cn_hash_fun get_argon2_fn(const int algo) {
   switch (algo) {
     case 0:  return FN(AR2_CHUKWA);
     case 1:  return FN(AR2_WRKZ);
+    case 2:  return FN(AR2_CHUKWA_V2);
     default: return FN(AR2_CHUKWA);
   }
 }
@@ -394,6 +408,7 @@ NAN_METHOD(k12) {
 
     v8::Isolate *isolate = v8::Isolate::GetCurrent();
     Local<Object> target = info[0]->ToObject(isolate->GetCurrentContext()).ToLocalChecked();
+	
     if (!Buffer::HasInstance(target)) return THROW_ERROR_EXCEPTION("Argument 1 should be a buffer object.");
 
     char output[32];
@@ -412,7 +427,7 @@ static void setsipkeys(const char *keybuf,siphash_keys *keys) {
 
 static void c29_setheader(const char *header, const uint32_t headerlen, siphash_keys *keys) {
 	char hdrkey[32];
-	rx_blake2b((void *)hdrkey, sizeof(hdrkey), (const void *)header, headerlen, 0, 0);
+	rx_blake2b((void *)hdrkey, sizeof(hdrkey), (const void *)header, headerlen);
 	setsipkeys(hdrkey,keys);
 }
 
@@ -429,7 +444,7 @@ NAN_METHOD(c29s) {
 
 	uint32_t edges[PROOFSIZE];
 	for (uint32_t n = 0; n < PROOFSIZE; n++)
-		edges[n]=ring->Get(n)->Uint32Value(Nan::GetCurrentContext()).FromJust();
+		edges[n]=ring->Get(Nan::GetCurrentContext(), n).ToLocalChecked()->Uint32Value(Nan::GetCurrentContext()).FromJust();
 	
 	int retval = c29s_verify(edges,&keys);
 
@@ -449,12 +464,53 @@ NAN_METHOD(c29v) {
 
 	uint32_t edges[PROOFSIZE];
 	for (uint32_t n = 0; n < PROOFSIZE; n++)
-		edges[n]=ring->Get(n)->Uint32Value(Nan::GetCurrentContext()).FromJust();
+		edges[n]=ring->Get(Nan::GetCurrentContext(), n).ToLocalChecked()->Uint32Value(Nan::GetCurrentContext()).FromJust();
 	
 	int retval = c29v_verify(edges,&keys);
 
 	info.GetReturnValue().Set(Nan::New<Number>(retval));
 }
+
+NAN_METHOD(c29i) {
+	if (info.Length() != 2) return THROW_ERROR_EXCEPTION("You must provide 2 arguments: header, ring");
+	
+	char * input = Buffer::Data(info[0]);
+	uint32_t input_len = Buffer::Length(info[0]);
+
+	siphash_keys keys;
+	c29_setheader(input,input_len,&keys);
+	
+	Local<Array> ring = Local<Array>::Cast(info[1]);
+
+	uint32_t edges[PROOFSIZEi];
+	for (uint32_t n = 0; n < PROOFSIZEi; n++)
+		edges[n]=ring->Get(Nan::GetCurrentContext(), n).ToLocalChecked()->Uint32Value(Nan::GetCurrentContext()).FromJust();
+	
+	int retval = c29i_verify(edges,&keys);
+
+	info.GetReturnValue().Set(Nan::New<Number>(retval));
+}
+
+NAN_METHOD(c29b) {
+	if (info.Length() != 2) return THROW_ERROR_EXCEPTION("You must provide 2 arguments: header, ring");
+	
+	char * input = Buffer::Data(info[0]);
+	uint32_t input_len = Buffer::Length(info[0]);
+
+	siphash_keys keys;
+	c29_setheader(input,input_len,&keys);
+	
+	Local<Array> ring = Local<Array>::Cast(info[1]);
+
+	uint32_t edges[PROOFSIZEb];
+	for (uint32_t n = 0; n < PROOFSIZEb; n++)
+		edges[n]=ring->Get(Nan::GetCurrentContext(), n).ToLocalChecked()->Uint32Value(Nan::GetCurrentContext()).FromJust();
+	
+	int retval = c29b_verify(edges,&keys);
+
+	info.GetReturnValue().Set(Nan::New<Number>(retval));
+}
+
 
 NAN_METHOD(c29_cycle_hash) {
 	if (info.Length() != 1) return THROW_ERROR_EXCEPTION("You must provide 1 argument:ring");
@@ -468,7 +524,7 @@ NAN_METHOD(c29_cycle_hash) {
 	int bitpos = 0;
 	for(int i = 0; i < PROOFSIZE; i++){
 
-		uint32_t node = ring->Get(i)->Uint32Value(Nan::GetCurrentContext()).FromJust();
+		uint32_t node = ring->Get(Nan::GetCurrentContext(), i).ToLocalChecked()->Uint32Value(Nan::GetCurrentContext()).FromJust();
 
 		for(int j = 0; j < EDGEBITS; j++) {
 			
@@ -483,7 +539,7 @@ NAN_METHOD(c29_cycle_hash) {
 	}
 
 	unsigned char cyclehash[32];
-	rx_blake2b((void *)cyclehash, sizeof(cyclehash), (uint8_t *)hashdata, sizeof(hashdata), 0, 0);
+	rx_blake2b((void *)cyclehash, sizeof(cyclehash), (uint8_t *)hashdata, sizeof(hashdata));
 	
 	unsigned char rev_cyclehash[32];
 	for(int i = 0; i < 32; i++)
@@ -491,6 +547,116 @@ NAN_METHOD(c29_cycle_hash) {
 	
 	v8::Local<v8::Value> returnValue = Nan::CopyBuffer((char*)rev_cyclehash, 32).ToLocalChecked();
 	info.GetReturnValue().Set(returnValue);
+}
+
+NAN_METHOD(c29b_cycle_hash) {
+	if (info.Length() != 1) return THROW_ERROR_EXCEPTION("You must provide 1 argument:ring");
+	
+	Local<Array> ring = Local<Array>::Cast(info[0]);
+
+	uint8_t hashdata[145]; // PROOFSIZEb*EDGEBITS/8
+	memset(hashdata, 0, 145);
+
+	int bytepos = 0;
+	int bitpos = 0;
+	for(int i = 0; i < PROOFSIZEb; i++){
+
+		uint32_t node = ring->Get(Nan::GetCurrentContext(), i).ToLocalChecked()->Uint32Value(Nan::GetCurrentContext()).FromJust();
+
+		for(int j = 0; j < EDGEBITS; j++) {
+			
+			if((node >> j) & 1U)
+				hashdata[bytepos] |= 1UL << bitpos;
+
+			bitpos++;
+			if(bitpos==8) {
+				bitpos=0;bytepos++;
+			}
+		}
+	}
+
+	unsigned char cyclehash[32];
+	rx_blake2b((void *)cyclehash, sizeof(cyclehash), (uint8_t *)hashdata, sizeof(hashdata));
+	
+	unsigned char rev_cyclehash[32];
+	for(int i = 0; i < 32; i++)
+		rev_cyclehash[i] = cyclehash[31-i];
+	
+	v8::Local<v8::Value> returnValue = Nan::CopyBuffer((char*)rev_cyclehash, 32).ToLocalChecked();
+	info.GetReturnValue().Set(returnValue);
+}
+
+NAN_METHOD(c29i_cycle_hash) {
+	if (info.Length() != 1) return THROW_ERROR_EXCEPTION("You must provide 1 argument:ring");
+
+	Local<Array> ring = Local<Array>::Cast(info[0]);
+
+	uint8_t hashdata[174]; // PROOFSIZEi*EDGEBITS/8
+	memset(hashdata, 0, 174);
+
+	int bytepos = 0;
+	int bitpos = 0;
+	for(int i = 0; i < PROOFSIZEi; i++){
+
+		uint32_t node = ring->Get(Nan::GetCurrentContext(), i).ToLocalChecked()->Uint32Value(Nan::GetCurrentContext()).FromJust();
+
+		for(int j = 0; j < EDGEBITS; j++) {
+
+			if((node >> j) & 1U)
+				hashdata[bytepos] |= 1UL << bitpos;
+
+			bitpos++;
+			if(bitpos==8) {
+				bitpos=0;bytepos++;
+			}
+		}
+	}
+
+	unsigned char cyclehash[32];
+	rx_blake2b((void *)cyclehash, sizeof(cyclehash), (uint8_t *)hashdata, sizeof(hashdata));
+
+	unsigned char rev_cyclehash[32];
+	for(int i = 0; i < 32; i++)
+		rev_cyclehash[i] = cyclehash[31-i];
+
+	v8::Local<v8::Value> returnValue = Nan::CopyBuffer((char*)rev_cyclehash, 32).ToLocalChecked();
+	info.GetReturnValue().Set(returnValue);
+}
+
+NAN_METHOD(kawpow) {
+	if (info.Length() != 3) return THROW_ERROR_EXCEPTION("You must provide 3 arguments: height, header hash + nonce (buff 40), target (buff 8)");
+
+	v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
+        if (!info[0]->IsNumber()) return THROW_ERROR_EXCEPTION("Argument 1 should be a number");
+        const uint32_t height = Nan::To<uint32_t>(info[0]).FromMaybe(0);
+
+	Local<Object> header_nonce = info[1]->ToObject(isolate->GetCurrentContext()).ToLocalChecked();
+	if (!Buffer::HasInstance(header_nonce)) return THROW_ERROR_EXCEPTION("Argument 2 should be a buffer object.");
+	if (Buffer::Length(header_nonce) != 40) return THROW_ERROR_EXCEPTION("Argument 2 should be a 40 bytes long buffer object.");
+
+	Local<Object> target_buff = info[2]->ToObject(isolate->GetCurrentContext()).ToLocalChecked();
+	if (!Buffer::HasInstance(target_buff)) return THROW_ERROR_EXCEPTION("Argument 3 should be a buffer object.");
+	if (Buffer::Length(target_buff) != 8) return THROW_ERROR_EXCEPTION("Argument 3 should be a 8 bytes long buffer object.");
+        const uint64_t target = *reinterpret_cast<const uint64_t*>(Buffer::Data(target_buff));
+
+	xmrig::KPCache::s_cache.init(height / xmrig::KPHash::EPOCH_LENGTH);
+        uint32_t output[8];
+        uint32_t mix_hash[8];
+	uint8_t header_hash[32];
+	memcpy(header_hash, reinterpret_cast<const uint8_t*>(Buffer::Data(header_nonce)), sizeof(header_hash));
+        const uint64_t nonce = *(reinterpret_cast<const uint64_t*>(Buffer::Data(header_nonce))+4);
+	xmrig::KPHash::calculate(xmrig::KPCache::s_cache, height, header_hash, nonce, output, mix_hash);
+
+	uint8_t hash[32]{ 0 };
+	for (size_t i = 0; i < sizeof(hash); ++i) hash[i] = ((uint8_t*)output)[sizeof(hash) - 1 - i];
+
+	if (*reinterpret_cast<uint64_t*>(hash + 24) < target) {
+		v8::Local<v8::Value> returnValue = Nan::CopyBuffer((char*)mix_hash, 32).ToLocalChecked();
+		info.GetReturnValue().Set(returnValue);
+        } else {
+		info.GetReturnValue().Set(Nan::Null());
+	}
 }
 
 
@@ -505,8 +671,12 @@ NAN_MODULE_INIT(init) {
     Nan::Set(target, Nan::New("k12").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(k12)).ToLocalChecked());
     Nan::Set(target, Nan::New("c29s").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(c29s)).ToLocalChecked());
     Nan::Set(target, Nan::New("c29v").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(c29v)).ToLocalChecked());
+    Nan::Set(target, Nan::New("c29b").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(c29b)).ToLocalChecked());
+    Nan::Set(target, Nan::New("c29i").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(c29i)).ToLocalChecked());
     Nan::Set(target, Nan::New("c29_cycle_hash").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(c29_cycle_hash)).ToLocalChecked());
+    Nan::Set(target, Nan::New("c29b_cycle_hash").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(c29b_cycle_hash)).ToLocalChecked());
+    Nan::Set(target, Nan::New("c29i_cycle_hash").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(c29i_cycle_hash)).ToLocalChecked());
+    Nan::Set(target, Nan::New("kawpow").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(kawpow)).ToLocalChecked());
 }
 
 NODE_MODULE(cryptonight, init)
-
